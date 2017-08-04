@@ -529,21 +529,13 @@ def state_dialect_words(loc_train, vocab, model, N=1000):
         state = all_loc_state[loc]
         loc_state[loc] = state
         state_indices[state].add(i)
-        dialects = dialect_states[state]
+        dialects = state_dialects[state]
         for dialect in dialects:
             dialect_indices[dialect].add(i)
         dialect_indices[state].add(i)
     
     locs = np.array(locs).astype('float32')
-
-    sampled_preds = []
-    for batch in model.iterate_minibatches(locs, locs, model.batch_size, shuffle=False):
-        x_batch, y_batch = batch
-        batch_pred = model.predict(x_batch)
-        sampled_preds.append(batch_pred)
-    sampled_predictions = np.vstack(tuple(sampled_preds))
-
-    #sampled_predictions = model.predict(locs)
+    sampled_predictions = model.predict(locs)
     point_dialects = set([state.lower() for state in loc_state.values()])
     #add related dialects for each state
     for state, dls in state_dialects.iteritems():

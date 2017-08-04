@@ -468,7 +468,6 @@ def load_data(data_home, **kwargs):
     extract_vocab = False
     norm = 'l1'
     idf = False
-    idf = True
     if extract_vocab:
         norm = None
         idf = False
@@ -561,24 +560,13 @@ def state_dialect_words(loc_train, vocab, model, N=1000):
         state = all_loc_state[loc]
         loc_state[loc] = state
         state_indices[state].add(i)
-        dialects = dialect_states[state]
+        dialects = state_dialects[state]
         for dialect in dialects:
             dialect_indices[dialect].add(i)
         dialect_indices[state].add(i)
     
     locs = np.array(locs).astype('float32')
-
-    sampled_preds = []
-    for batch in model.iterate_minibatches(locs, locs, model.batch_size, shuffle=False):
-        x_batch, y_batch = batch
-        batch_pred = model.predict(x_batch)
-        sampled_preds.append(batch_pred)
-    if len(sampled_preds) > 1:
-        sampled_predictions = np.vstack(tuple(sampled_preds))
-    else:
-        sampled_predictions = sampled_preds
-
-    #sampled_predictions = model.predict(locs)
+    sampled_predictions = model.predict(locs)
     point_dialects = set([state.lower() for state in loc_state.values()])
     #add related dialects for each state
     for state, dls in state_dialects.iteritems():
@@ -690,14 +678,12 @@ def train(data, **kwargs):
     model = NNModel(n_epochs=10000, batch_size=batch_size, regul_coef=regul, 
                     input_size=input_size, output_size=output_size, hid_size=hid_size, 
                     drop_out=False, dropout_coef=dropout_coef, early_stopping_max_down=3, 
-                    autoencoder=autoencoder, reload=False, n_gaus_comp=n_gaus_comp, mus=mus, 
+                    autoencoder=autoencoder, reload=True, n_gaus_comp=n_gaus_comp, mus=mus, 
                     sigmas=raw_stds, corxy=raw_cors, nomdn=nomdn, dataset_name=dataset_name)
     #pdb.set_trace()
     perplexity_test, perplexity_dev = model.fit(loc_train, W_train, loc_dev, W_dev, loc_test, W_test)
     #model.fit(loc_train, loc_train, loc_dev, loc_dev, loc_test, loc_test)
     
-    
-    state_dialect_words(loc_train, vocab, model, N=10000 if dataset_name=='na' else 2000)
 
     if tune:
         return perplexity_test, perplexity_dev
@@ -770,7 +756,9 @@ def train(data, **kwargs):
     with open(info_file, 'wb') as fout:
         pickle.dump((coords, preds, vocab), fout)
 
-    contour_me(info_file, dataset_name=dataset_name)       
+    contour_me(info_file, dataset_name=dataset_name)
+    
+    state_dialect_words(loc_train, vocab, model, N=10000 if dataset_name=='na' else 2000)       
     
 def get_local_words(preds, vocab, NEs=[], k=50):
     #normalize the probabilites of each vocab
@@ -820,7 +808,7 @@ def contour_me(info_file='./dumps/coords-preds-vocab5685_50.pkl', **kwargs):
             word_dialect[dialect_word['word']] = dialect_word['dialect']
     
             
-    map_dir = './maps/' + info_file.split('.')[-2] + '/'
+    map_dir = './maps/' + info_file.split('/')[-1].split('.')[0] + '/'
     if os.path.exists(map_dir):
         shutil.rmtree(map_dir)
     os.mkdir(map_dir)
