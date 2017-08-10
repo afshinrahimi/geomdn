@@ -200,6 +200,7 @@ class NNModel():
 
     def set_params(self, params):
         lasagne.layers.set_all_param_values(self.l_out, params)
+        self.best_params = params
 
     def iterate_minibatches(self, inputs, targets, batchsize, shuffle=False):
         assert inputs.shape[0] == targets.shape[0]
@@ -214,13 +215,14 @@ class NNModel():
             yield inputs[excerpt], targets[excerpt]       
     
     def fit(self, X_train, Y_train, X_dev, Y_dev, X_test, Y_test):
-        model_file = './data/loc2lang_%s_hid%d_gaus%d_out%d_%s.pkl' %(self.dataset_name, self.hid_size, self.n_gaus_comp, self.output_size, str(self.nomdn))
+        model_file = './dumps/loc2lang_%s_hid%d_gaus%d_out%d_%s.pkl' %(self.dataset_name, self.hid_size, self.n_gaus_comp, self.output_size, str(self.nomdn))
         if self.reload:
             if path.exists(model_file):
                 logging.info('loading the model from %s' %model_file)
                 with open(model_file, 'rb') as fin:
                     params = pickle.load(fin)
                 self.set_params(params)
+                
                 
         else:
             logging.info('training with %d n_epochs and  %d batch_size' %(self.n_epochs, self.batch_size))
@@ -258,6 +260,7 @@ class NNModel():
                 logging.info('iter %d, train loss %f, dev loss %f, best dev loss %f, num_down %d' %(step, l_train, l_val, best_val_loss, n_validation_down))
             
             lasagne.layers.set_all_param_values(self.l_out, best_params)
+            self.best_params = best_params
             #for debugging the output of gaussian layer
             #debug_gaussian(best_params)
             logging.info('dumping the model in %s' %model_file)
@@ -282,31 +285,7 @@ class NNModel():
 
  
 
-def grid_representation(input, grid_size=0.5):
-    lllat = 24.396308
-    lllon = -124.848974
-    urlat =  49.384358
-    urlon = -66.885444
-    lats = np.arange(lllat, urlat, grid_size)
-    lons = np.arange(lllon, urlon, grid_size)
-    num_points = len(lats) * len(lons)
-    #X = np.zeros((input.shape[0], num_points), dtype=input.dtype)
-    X = sp.sparse.lil_matrix((input.shape[0], num_points), dtype=input.dtype)
-    coords = []
-    for lat in lats:
-        for lon in lons:
-            coords.append((lat, lon))
 
-    for sample in range(input.shape[0]):
-        latlon = (input[sample, 0], input[sample, 1])
-        for i, coord in enumerate(coords):
-            dist = haversine(latlon, coord, miles=False)
-            if dist < 161:
-                X[sample, i] = 1.0 / dist
-
-    #normalize each sample to unit vector
-    normalize(X, norm='l1', copy=False)  
-    return X.tocsr(copy=False)
           
 
 
@@ -399,12 +378,11 @@ def load_data(data_home, **kwargs):
     mindf = kwargs.get('mindf', 10)
     dtype = kwargs.get('dtype', 'float32')
     one_hot_label = kwargs.get('onehot', False)
-    grid_transform = kwargs.get('grid', False)
     normalize_words = kwargs.get('norm', False)
 
 
     vocab = None
-    vocab_file = './data/na_vocab.pkl'
+    vocab_file = './dumps/na_vocab.pkl'
     if 'na' in dataset_name and path.exists(vocab_file):
         with open(vocab_file, 'rb') as fin:
             vocab = pickle.load(fin)
@@ -423,7 +401,7 @@ def load_data(data_home, **kwargs):
     dl.load_data()
 
     #load words that often start with uppercase (heuristic named entity detection)
-    ne_file = './data/ne_' + dataset_name + '.json'
+    ne_file = './dumps/ne_' + dataset_name + '.json'
     if path.exists(ne_file):
         with codecs.open(ne_file, 'r', encoding='utf-8') as fout:
             NEs = json.load(fout)
@@ -462,41 +440,12 @@ def load_data(data_home, **kwargs):
         for dare_w in frequent_dare_words:
             frequent_vocab_words.add(dare_w)
         new_vocab = sorted(frequent_vocab_words)
-        with open('./data/' + dataset_name + '_vocab.pkl', 'wb') as fout:
+        with open('./dumps/' + dataset_name + '_vocab.pkl', 'wb') as fout:
             pickle.dump(new_vocab, fout)
-
-    
-            
     W_train = dl.X_train
     W_dev = dl.X_dev.todense().astype('float32')
     W_test = dl.X_test.todense().astype('float32')
-    
-
-    vocab = dl.vectorizer.get_feature_names()
-
-    # every 2d latlon becomes a high dimensional based on distances to the points on a equal-sized grid over US map
-    if grid_transform:
-        grid_file = 'grid' + str(loc_train.shape[0]) + '.pkl'
-        if path.exists(grid_file):
-            logging.info('loading grid from %s' %grid_file)
-            with open(grid_file, 'rb') as fin:
-                loc_train, loc_dev, loc_test = pickle.load(fin)
-        else:
-            logging.info('transforming lat/lons to grid representation...')
-            loc_train = grid_representation(loc_train)
-            loc_dev = grid_representation(loc_dev)
-            loc_test = grid_representation(loc_test)
-            logging.info('transformation  to %d grids finished.' %loc_train.shape[1])
-            logging.info('dumping grids to %s' %grid_file)
-            with open(grid_file, 'wb') as fout:
-                pickle.dump((loc_train, loc_dev, loc_test), fout)
-    else:
-        logging.info('gridding is off!')
-
-            
-            
-
-    
+    vocab = dl.vectorizer.get_feature_names()    
     data = (loc_train, W_train, loc_dev, W_dev, loc_test, W_test, vocab)
     return data
 
@@ -559,9 +508,9 @@ def state_dialect_words(loc_train, vocab, model, N=1000):
         sorted_vocab_indices = np.argsort(dialect_normalized_logprobs)
         sorted_vocab = np.array(vocab)[sorted_vocab_indices].tolist()
         dialect_ranking[dialect] = list(reversed(sorted_vocab))
-    printable_dialect_ranking = {d:rank[0:100] for d, rank in dialect_ranking.iteritems()}
-    with open('./data/dialect_ranking_' + str(len(vocab)) + '.json', 'w') as fout:
-        json.dump(printable_dialect_ranking, fout)
+    printable_dialect_ranking = {d:rank[0:200] for d, rank in dialect_ranking.iteritems()}
+    with open('./dumps/dialect_ranking_{}_hid{}_comp{}.json'.format(len(vocab), model.hid_size, model.n_gaus_comp) , 'w') as fout:
+        json.dump(printable_dialect_ranking, fout, indent=4, sort_keys=True)
     #recall at k for each state
     intervals = [0.01, 0.05, 0.1, 0.15, 0.2]
     #ks = [max(1, int(i * len(vocab))) for i in intervals]
@@ -594,7 +543,46 @@ def state_dialect_words(loc_train, vocab, model, N=1000):
     
         
         
-        
+def city_dialect_words(model, vocab, filename='./city_ranking.txt'):
+    #load named entities
+    ne_file = './dumps/ne_' + dataset_name + '.json'
+    with codecs.open(ne_file, 'r', encoding='utf-8') as fout:
+        NEs = json.load(fout)
+    NEs = set(NEs['nes'])
+    
+    k = 200
+    with open('./data/cities.json', 'r') as fin:
+        cities = json.load(fin)
+    all_locs = np.array([[city['latitude'], city['longitude']] for city in cities]).astype('float32')
+    all_probs = model.predict(all_locs)
+    all_logprobs = np.log(all_probs)
+    all_logprobs_mean = np.mean(all_logprobs, axis=0)
+    city_dialectwords = defaultdict(list)
+    
+    cities = cities[0:200]
+    for city in cities:
+        name = city['city']
+        lat, lon = city['latitude'], city['longitude']
+        loc = np.array([[lat, lon]]).astype('float32')
+        city_probs = model.predict(loc)
+        city_logprobs = np.log(city_probs)
+        normalized_city_logprobs = city_logprobs - all_logprobs_mean
+        sorted_vocab_indices = np.argsort(normalized_city_logprobs)
+        topwords = list(reversed(np.array(vocab)[sorted_vocab_indices][0].tolist()))[0:k]
+
+        #check if a topword is a named entity add a star beside it
+        dialect_words = []
+        for topword in topwords:
+            if topword in NEs:
+                topword = "NE_" + topword
+            dialect_words.append(topword)
+
+        city_dialectwords[name] = dialect_words
+        #write the city_dialectwords to file
+        with codecs.open(filename, 'w', encoding='utf-8') as fout:
+            json.dump(city_dialectwords, fout, indent=4, sort_keys=True)
+
+           
         
         
     
@@ -605,7 +593,6 @@ def train(data, **kwargs):
     regul = kwargs.get('regul_coef', 1e-6)
     hid_size = kwargs.get('hidden_size', 500)
     autoencoder = kwargs.get('autoencoder', False)
-    grid_transform = kwargs.get('grid', False)
     n_gaus_comp = kwargs.get('ncomp', 500)
     dataset_name = kwargs.get('dataset_name')
     kmeans_mu = kwargs.get('kmeans', True)
@@ -614,7 +601,11 @@ def train(data, **kwargs):
     loc_train, W_train, loc_dev, W_dev, loc_test, W_test, vocab = data
     input_size = loc_train.shape[1]
     output_size = W_train.shape[1]
-    batch_size = 4000
+    batch_size = kwargs.get('batch', 4000)
+    vis_words = kwargs.get('map', True)
+    vbi = kwargs.get('vbi', True)
+    reload = kwargs.get('reload', False)
+    epochs = kwargs.get('epochs', 1000)
 
     
     
@@ -643,10 +634,10 @@ def train(data, **kwargs):
         raw_stds = None
         raw_cors = None
     
-    model = NNModel(n_epochs=1000, batch_size=batch_size, regul_coef=regul, 
+    model = NNModel(n_epochs=epochs, batch_size=batch_size, regul_coef=regul, 
                     input_size=input_size, output_size=output_size, hid_size=hid_size, 
-                    drop_out=False, dropout_coef=dropout_coef, early_stopping_max_down=1, 
-                    autoencoder=autoencoder, reload=False, n_gaus_comp=n_gaus_comp, mus=mus, 
+                    drop_out=False, dropout_coef=dropout_coef, early_stopping_max_down=3, 
+                    autoencoder=autoencoder, reload=reload, n_gaus_comp=n_gaus_comp, mus=mus, 
                     sigmas=raw_stds, corxy=raw_cors, nomdn=nomdn, dataset_name=dataset_name)
     #pdb.set_trace()
     perplexity_test, perplexity_dev = model.fit(loc_train, W_train, loc_dev, W_dev, loc_test, W_test)
@@ -658,40 +649,9 @@ def train(data, **kwargs):
     if tune:
         return perplexity_test, perplexity_dev
     
-    #load named entities
-    ne_file = './data/ne_' + dataset_name + '.json'
-    with codecs.open(ne_file, 'r', encoding='utf-8') as fout:
-        NEs = json.load(fout)
-    NEs = set(NEs['nes'])
-    
-    k = 150
-    with open('./data/cities.json', 'r') as fin:
-        cities = json.load(fin)
-    local_word_file = './data/local_words_'  + str(W_train.shape)+ '_' + str(n_gaus_comp) + '.txt'
-    with codecs.open(local_word_file, 'w', encoding='utf-8') as fout:
-        cities = cities[0:100]
-        for city in cities:
-            name = city['city']
-            lat, lon = city['latitude'], city['longitude']
-            loc = np.array([[lat, lon]]).astype('float32')
-            #grid representation
-            if grid_transform:
-                loc = grid_representation(input=loc)
-            preds = model.predict(loc)
-            topword_indices = np.argsort(preds)[0][::-1][:k]
-            topwords = [vocab[i] for i in topword_indices]
-            #check if a topword is a named entity add a star beside it
-            newtopwords = []
-            for topword in topwords:
-                if topword in NEs:
-                    topword = topword + "_NE"
-                newtopwords.append(topword)
-            #logging.info(name)
-            #logging.info(str(topwords))
-            fout.write('\n*****%s*****\n' %name)
-            fout.write(str(newtopwords))
             
-    
+    filename = './dumps/local_words_{}_{}.txt'.format(str(W_train.shape), n_gaus_comp)
+    city_dialect_words(model, vocab, filename=filename)
     
     # us bounding box (-124.848974, 24.396308) - (-66.885444, 49.384358)
     lllat = 24.396308
@@ -722,22 +682,21 @@ def train(data, **kwargs):
     else:
         coords = np.array(map(list, product(lats, lons))).astype('float32')
 
-    #grid representation
-
     preds = model.predict(coords)
-    info_file = 'coords-preds-vocab' + str(W_train.shape[0])+ '_' + str(n_gaus_comp) + '.pkl'
-    logging.info('dumping the results in %s' %info_file)
-    with open(info_file, 'wb') as fout:
-        pickle.dump((coords, preds, vocab), fout)
-
-    contour_me(info_file, dataset_name=dataset_name)       
+    if vis_words:
+        map_words(coords, preds, vocab, map_dir='./maps/{}_voc{}_comp{}/'.format(dataset_name, W_train.shape[1], n_gaus_comp), dataset_name=dataset_name)
+    if vbi: 
+        visualise_bigaus(params=model.best_params, iter=None, output_type='pdf')      
     
 def get_local_words(preds, vocab, NEs=[], k=50):
-    #normalize the probabilites of each vocab
+    
+    #normalize the probabilites of each vocab using entropy
     normalized_preds = normalize(preds, norm='l1', axis=0)
     entropies = stats.entropy(normalized_preds)
     sorted_indices = np.argsort(entropies)
     sorted_local_words = np.array(vocab)[sorted_indices].tolist()
+
+    
     filtered_local_words = []
     NEset = set(NEs)
     for word in sorted_local_words:
@@ -745,8 +704,7 @@ def get_local_words(preds, vocab, NEs=[], k=50):
         filtered_local_words.append(word)
     return filtered_local_words[0:k]
    
-def contour_me(info_file='coords-preds-vocab429200_1000.pkl', **kwargs):
-    dataset_name = kwargs.get('dataset_name')
+def map_words(coords, preds, vocab, map_dir, dataset_name):
     lllat = 24.396308
     lllon = -124.848974
     urlat =  49.384358
@@ -780,29 +738,30 @@ def contour_me(info_file='coords-preds-vocab429200_1000.pkl', **kwargs):
             word_dialect[dialect_word['word']] = dialect_word['dialect']
     
             
-    map_dir = './maps/' + info_file.split('.')[0] + '/'
-    if os.path.exists(map_dir):
-        shutil.rmtree(map_dir)
-    os.mkdir(map_dir)
+
+    #if os.path.exists(map_dir):
+    #    shutil.rmtree(map_dir)
+    try:
+        os.mkdir(map_dir)
+    except:
+        logging.info('map_dir %s exists or can not be created.')
     
     
     topk_words = []    
+    for words in region_words.values():
+        topk_words.extend(words)
     topk_words.extend(word_dialect.keys())
     dialect_words = ['hella', 'yall', 'jawn', 'paczki', 'euchre', 'brat', 'toboggan', 'brook', 'grinder', 'yinz', 'youze', 'yeen']
     topk_words.extend(dialect_words)
     custom_words = ['springfield', 'columbia', 'nigga', 'niqqa', 'bamma', 'cooter', 'britches', 'yapper', 'younguns', 'hotdish', 
                     'schnookered', 'bubbler', 'betcha', 'dontcha']
     topk_words.extend(custom_words)
-            
-    logging.info('reading info...')
-    with open(info_file, 'rb') as fin:
-        coords, preds, vocab = pickle.load(fin)
     vocabset = set(vocab)
     dare_in_vocab = set(word_dialect.keys()) & vocabset
     logging.info('%d DARE words, %d in vocab' %(len(word_dialect), len(dare_in_vocab)))
     add_local_words = True
     if add_local_words:
-        ne_file = './data/ne_' + dataset_name + '.json'
+        ne_file = './dumps/ne_' + dataset_name + '.json'
         with codecs.open(ne_file, 'r', encoding='utf-8') as fout:
             NEs = json.load(fout)
         NEs = NEs['nes']
@@ -822,7 +781,6 @@ def contour_me(info_file='coords-preds-vocab429200_1000.pkl', **kwargs):
     for word in topk_words:
         if word in vocabset:
             fig = plt.figure(figsize=(5, 4))
-            grid_transform = kwargs.get('grid', False)
             ax = fig.add_subplot(111, axisbg='w', frame_on=False)
             logging.info('%d mapping %s' %(wi, word))
             wi += 1
@@ -946,18 +904,15 @@ def contour_me(info_file='coords-preds-vocab429200_1000.pkl', **kwargs):
                 ax.add_patch(poly)
             #plt.title('term: ' + word )
             plt.tight_layout()
-            plt.savefig(map_dir + word + '_' + grid_interpolation_method +  '.pdf', bbox_inches='tight')
+            filename = '{}{}_{}.pdf'.format(map_dir, word.encode('utf-8'), grid_interpolation_method)
+            plt.savefig(filename, bbox_inches='tight')
             plt.close()
             del m
 
 
-def visualise_bigaus(params_file, params=None, iter=None, output_type='pdf', **kwargs):
-    if params == None:
-        with open(params_file, 'rb') as fin:
-            params = pickle.load(fin)
-            
-    mus, sigmas, corxys = params[0], params[1], params[2] 
+def visualise_bigaus(params=None, iter=None, output_type='pdf', **kwargs):
 
+    mus, sigmas, corxys = params[0], params[1], params[2] 
     dataset_name = kwargs.get('dataset_name')
     lllat = 24.396308
     lllon = -124.848974
@@ -1064,7 +1019,8 @@ def visualise_bigaus(params_file, params=None, iter=None, output_type='pdf', **k
         #Z = maskoceans(X, Y, Z)
         
 
-        con = m.contour(X, Y, Z, levels=[0.01], linewidths=0.5, colors='darkorange', antialiased=True)
+        #con = m.contour(X, Y, Z, levels=[0.01], linewidths=0.5, colors='darkorange', antialiased=True)
+        con = m.contour(X, Y, Z, 0, linewidths=0.5, colors='darkorange', antialiased=True)
         '''
         num_levels = len(con.collections)
         if num_levels > 1:
@@ -1088,7 +1044,8 @@ def visualise_bigaus(params_file, params=None, iter=None, output_type='pdf', **k
     else:
         iter = ''
     plt.tight_layout()
-    plt.savefig('./maps/video/gaus_' + iter  + '.' + output_type, frameon=False, dpi=200)
+    filename = './maps/video/{}_gaus_{}_{}'.format(dataset_name, iter, output_type)
+    plt.savefig(filename, frameon=False, dpi=200)
     plt.close()
 
 def tune(data, dataset_name, args, num_iter=100):
@@ -1138,33 +1095,24 @@ def parse_args(argv):
     parser.add_argument( '-enc','--encoding', metavar='str',  help='Data Encoding (e.g. latin1, utf-8)',  type=str, default='utf-8')
     parser.add_argument( '-reg','--regularization', metavar='float',  help='regularization coefficient)',  type=float, default=1e-6)
     parser.add_argument( '-drop','--dropout', metavar='float',  help='dropout coef default 0.5',  type=float, default=0.5)
-    parser.add_argument( '-cel','--celebrity', metavar='int',  help='celebrity threshold',  type=int, default=10)
-    parser.add_argument( '-conv', '--convolution', action='store_true',  help='if true do convolution')
     parser.add_argument( '-map', '--map', action='store_true',  help='if true just draw maps from pre-trained model')
-    parser.add_argument( '-tune', '--tune', action='store_true',  help='if true tune the hyper-parameters') 
-    parser.add_argument( '-tf', '--tensorflow', action='store_true',  help='if exists run with tensorflow') 
-    parser.add_argument( '-autoencoder', '--autoencoder', type=int,  help='the number of autoencoder steps before training', default=0) 
-    parser.add_argument( '-grid', '--grid', action='store_true',  help='if exists transforms the input from lat/lon to distance from grids on map')  
+    parser.add_argument( '-tune', '--tune', action='store_true',  help='if true tune the hyper-parameters')  
+    parser.add_argument( '-autoencoder', '--autoencoder', type=int,  help='the number of autoencoder steps before training', default=0)   
     parser.add_argument( '-ncomp', type=int,  help='the number of bivariate gaussians after the input layer', default=500) 
-    parser.add_argument( '-m', '--message', type=str) 
     parser.add_argument( '-vbi', '--vbi', type=str,  help='if exists load params from vbi file and visualize bivariate gaussians on a map', default=None)
-    parser.add_argument( '-nomdn', '--nomdn', action='store_true',  help='if true use tanh layer instead of MDN') 
+    parser.add_argument( '-reload', action='store_true',  help='if true try to reload the parameters of network from pickle file')
+    parser.add_argument( '-epochs', metavar='int',  help='maximum number of epochs for optimization',  type=int, default=1000) 
     args = parser.parse_args(argv)
     return args
 if __name__ == '__main__':
-    #THEANO_FLAGS='device=cpu' nice -n 10 python loc2lang.py -d ~/datasets/na/processed_data/ -enc utf-8 -reg 0 -drop 0.0 -mindf 200 -hid 1000 -ncomp 100 -autoencoder 100 -map
+    #THEANO_FLAGS='device=cpu' nice -n 10 python loc2lang_old.py -d ~/datasets/na/processed_data/ -enc utf-8 -reg 0 -drop 0.0 -mindf 200 -hid 1000 -ncomp 100 -autoencoder 100 -map
     args = parse_args(sys.argv[1:])
     datadir = args.dir
     dataset_name = datadir.split('/')[-3]
     logging.info('dataset: %s' % dataset_name)
-    if args.vbi:
-        visualise_bigaus(args.vbi, dataset_name=dataset_name)
-    elif args.map:
-        contour_me(grid=args.grid, dataset_name=dataset_name)
+    data = load_data(data_home=args.dir, encoding=args.encoding, mindf=args.mindf, dataset_name=dataset_name)
+    if args.tune:
+        tune(data, dataset_name, args, num_iter=100)
     else:
-        data = load_data(data_home=args.dir, encoding=args.encoding, mindf=args.mindf, grid=args.grid, dataset_name=dataset_name)
-        if args.tune:
-            tune(data, dataset_name, args, num_iter=100)
-        else:
-            train(data, regul_coef=args.regularization, dropout_coef=args.dropout, 
-                  hidden_size=args.hidden, autoencoder=args.autoencoder, ncomp=args.ncomp, dataset_name=dataset_name, nomdn=args.nomdn)
+        train(data, regul_coef=args.regularization, dropout_coef=args.dropout, 
+              hidden_size=args.hidden, autoencoder=args.autoencoder, ncomp=args.ncomp, dataset_name=dataset_name, batch=args.batch, reload=args.reload, epochs=args.epochs)
