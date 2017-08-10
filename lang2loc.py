@@ -429,12 +429,15 @@ class NNModel_lang2loc():
                 l_trains.append(l_train)
             l_train = np.mean(l_trains)
             #because dev set is big we can't predict in a row because of memory size
-            l_vals = []
-            for batch in self.iterate_minibatches(X_dev, Y_dev, self.batch_size, shuffle=False):
-                x_batch, y_batch = batch
-                l_val = self.f_val(x_batch, y_batch)
-                l_vals.append(l_val)
-            l_val = np.mean(l_vals)
+            if self.dataset_name == "na":
+                l_vals = []
+                for batch in self.iterate_minibatches(X_dev, Y_dev, self.batch_size, shuffle=False):
+                    x_batch, y_batch = batch
+                    l_val = self.f_val(x_batch, y_batch)
+                    l_vals.append(l_val)
+                l_val = np.mean(l_vals)
+            else:
+                l_val = self.f_val(X_dev, Y_dev)
             #preds = self.predict(X_dev)
 
             if l_val < best_val_loss:
