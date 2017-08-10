@@ -170,7 +170,7 @@ class BivariateGaussianLayer(Layer):
             sigmas_init = sigmas
         else:
             #sigmas_init = np.array([10, 10]).astype('float32') * np.abs(np.random.randn(self.num_units, 2).reshape((self.num_units,2))).astype('float32')
-            sigmas_init = np.array([10, 10]).astype('float32') * np.ones(shape=(self.num_units, 2)).astype('float32')
+            sigmas_init = np.array([5, 5]).astype('float32') * np.ones(shape=(self.num_units, 2)).astype('float32')
         
         if corxy is not None:
             corxy_init = corxy
@@ -210,9 +210,10 @@ class BivariateGaussianLayer(Layer):
         #a trick for numerical reasons: a1 * a2 * exp(b) == exp(log(a1) + log(a2) + b)
         #probs = (0.5 / np.pi) * sigmainvprods * T.sqrt(oneminuscorxy2inv) * T.exp(expterm)    #the term without the logexp trick
         #note a x exp(b) = exp(log(a) + b)
-        probs = T.exp(T.log(0.5/np.pi) + T.log(sigmainvprods) + T.log(T.sqrt(oneminuscorxy2inv)) + expterm)
-
-        return probs
+        logprobs = T.log(0.5/np.pi) + T.log(sigmainvprods) + T.log(T.sqrt(oneminuscorxy2inv)) + expterm
+        probs = T.exp(logprobs)
+        output = T.nnet.softmax(logprobs)
+        return output
 
 class MDNSharedParams(DenseLayer):
 
@@ -231,9 +232,9 @@ class MDNSharedParams(DenseLayer):
             sigmas_init = sigmas
         else:
             #emnlp submission
-            #sigmas_init = np.array([10, 10]).astype('float32') * np.abs(np.random.randn(self.num_units, 2).reshape((self.num_units,2))).astype('float32')
-            #later corrections (just tested for loc2lang)
-            sigmas_init = np.random.uniform(low=5, high=10, size=(self.num_units, 2)).astype('float32')
+            sigmas_init = np.array([10, 10]).astype('float32') * np.abs(np.random.randn(self.num_units, 2).reshape((self.num_units,2))).astype('float32')
+            #later corrections (just tested for loc2lang_old)
+            #sigmas_init = np.random.uniform(low=5, high=10, size=(self.num_units, 2)).astype('float32')
         
         if corxy is not None:
             corxy_init = corxy
