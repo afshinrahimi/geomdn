@@ -28,7 +28,6 @@ hidden layer consisits of several Gaussian distributions whose mus, sigmas and c
 and its output is the probability of input in each of the Gaussian components.
 
 **Look at** some of the [maps](https://drive.google.com/open?id=0B9ZfPKPvp-JiWlhoZ01HMk9GY3c)
-
 [local words](https://drive.google.com/open?id=0B9ZfPKPvp-JiTW1yWlF2ZG56SUE) including named entities for several DARE dialect regions 
 and [city terms](https://drive.google.com/open?id=0B9ZfPKPvp-JiNHd6Um5nV2RBWjQ) including named entities for about 100 U.S. cities
 
