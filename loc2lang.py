@@ -14,12 +14,7 @@ import matplotlib.mlab as mlab
 from matplotlib import ticker
 import matplotlib.pyplot as plt
 from matplotlib import rc
-from matplotlib.mlab import griddata
 from matplotlib.patches import Polygon as MplPolygon
-#import seaborn as sns
-#sns.set(style="white")
-import operator
-from scipy.stats import multivariate_normal
 import argparse
 import sys
 from scipy.spatial import ConvexHull
@@ -28,35 +23,29 @@ import pdb
 import random
 from data import DataLoader
 import numpy as np
-import sys
 from os import path
 import scipy as sp
 import theano
-import shutil
 import theano.tensor as T
 import lasagne
-from lasagne.regularization import regularize_layer_params_weighted, l2, l1
-from lasagne.regularization import regularize_layer_params
-import theano.sparse as S
-from lasagne.layers import DenseLayer, DropoutLayer
 import logging
 import json
 import codecs
 import pickle
-import gzip
-from collections import OrderedDict, Counter
+from collections import OrderedDict
 from sklearn.preprocessing import normalize
 from haversine import haversine
 from _collections import defaultdict
 from scipy import stats
-from mpl_toolkits.basemap import Basemap, cm, maskoceans
+from mpl_toolkits.basemap import Basemap, maskoceans
 from scipy.interpolate import griddata as gd
-from lasagne_layers import SparseInputDenseLayer, GaussianRBFLayer, DiagonalBivariateGaussianLayer, BivariateGaussianLayer
-from shapely.geometry import MultiPoint, Point, Polygon
+from lasagne_layers import BivariateGaussianLayer
+from shapely.geometry import Point, Polygon
 import shapefile
-from utils import short_state_names, stop_words, get_us_city_name
-from sklearn.cluster import KMeans, MiniBatchKMeans
+from utils import short_state_names, stop_words
+from sklearn.cluster import MiniBatchKMeans
 import utils
+
 logging.basicConfig(format='%(asctime)s %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p', level=logging.INFO)   
 rc('font',**{'family':'sans-serif','sans-serif':['Helvetica']})
 ## for Palatino and other serif fonts use:
@@ -115,7 +104,20 @@ def softplus(x):
 def softsign(x):
     return x / (1 + np.abs(x))
 
-class NNModel():
+class Loc2Lang():
+    """
+    This class implements a NN with 2d location as input
+    and a probability distribution over unigram vocabulary
+    as output.
+    The model has a Gaussian Activation layer where the probability
+    of each input in each of the gaussian components is computed and
+    used as location representation from which word distributions are
+    learned.
+    
+    The learned word distributions can be used to detect local terms
+    from a given region/location and also the learned Gaussians in
+    the hidden layer are representing the dialect regions.
+    """
     def __init__(self, 
                  n_epochs=10, 
                  batch_size=1000, 
@@ -157,7 +159,17 @@ class NNModel():
         
         
     def build(self):
-
+        """
+        build the network with 2d location as input,
+        a bivariate Gaussian activated layer as hidden layer,
+        a tanh layer as another hidden layer and a softmax
+        probability distribution over vocabulary as output.
+        
+        Note that we didn't add regularization/dropout because the input 
+        didn't have noisy features but nevertheless it might worth experimenting with.
+        
+        """
+        
         self.X_sym = T.matrix()
         self.Y_sym = T.matrix()
 
@@ -230,12 +242,13 @@ class NNModel():
             best_val_loss = sys.maxint
             n_validation_down = 0
             
-            #train autoencoder
-            
+            vis_gaussians_during_training = False
             for step in range(self.n_epochs):
-                #if step % 10 == 0:    
-                #    best_params = lasagne.layers.get_all_param_values(self.l_out)
-                #    visualise_bigaus(params_file=None, params=best_params, iter=step, output_type='png')
+                if vis_gaussians_during_training:
+                    #visualize learned Gaussian components in each 10 iterations (makes the training slower)
+                    if step % 10 == 0:    
+                        best_params = lasagne.layers.get_all_param_values(self.l_out)
+                        visualise_gaussians(params=best_params, iter=step, output_type='png')
                 l_trains = []
                 for batch in self.iterate_minibatches(X_train, Y_train, self.batch_size, shuffle=True):
                     x_batch, y_batch = batch
@@ -634,7 +647,7 @@ def train(data, **kwargs):
         raw_stds = None
         raw_cors = None
     
-    model = NNModel(n_epochs=epochs, batch_size=batch_size, regul_coef=regul, 
+    model = Loc2Lang(n_epochs=epochs, batch_size=batch_size, regul_coef=regul, 
                     input_size=input_size, output_size=output_size, hid_size=hid_size, 
                     drop_out=False, dropout_coef=dropout_coef, early_stopping_max_down=3, 
                     autoencoder=autoencoder, reload=reload, n_gaus_comp=n_gaus_comp, mus=mus, 
@@ -645,7 +658,8 @@ def train(data, **kwargs):
     
     
     state_dialect_words(loc_train, vocab, model, N=10000 if dataset_name=='na' else 5000)
-
+    
+    #in case of tuning we don't want to visualize anything
     if tune:
         return perplexity_test, perplexity_dev
     
@@ -686,10 +700,18 @@ def train(data, **kwargs):
     if vis_words:
         map_words(coords, preds, vocab, map_dir='./maps/{}_voc{}_comp{}/'.format(dataset_name, W_train.shape[1], n_gaus_comp), dataset_name=dataset_name)
     if vbi: 
-        visualise_bigaus(params=model.best_params, iter=None, output_type='pdf')      
+        #visualize the learned gaussians over the map
+        visualise_gaussians(params=model.best_params, iter=None, output_type='pdf')      
     
 def get_local_words(preds, vocab, NEs=[], k=50):
-    
+    """
+    given the word probabilities over many coordinates,
+    first normalize the probability of each word in different
+    locations to get a probability distribution, then compute
+    the entropy of the word's distribution over all coordinates
+    and return the words that are low entropy and are not
+    named entities.
+    """
     #normalize the probabilites of each vocab using entropy
     normalized_preds = normalize(preds, norm='l1', axis=0)
     entropies = stats.entropy(normalized_preds)
@@ -705,6 +727,12 @@ def get_local_words(preds, vocab, NEs=[], k=50):
     return filtered_local_words[0:k]
    
 def map_words(coords, preds, vocab, map_dir, dataset_name):
+    """
+    given the coords distributed over the map and
+    the unigram distribution over vocabulary pred,
+    contourf the logprob of a word over the map
+    with interpolation.
+    """
     lllat = 24.396308
     lllon = -124.848974
     urlat =  49.384358
@@ -746,7 +774,8 @@ def map_words(coords, preds, vocab, map_dir, dataset_name):
     except:
         logging.info('map_dir %s exists or can not be created.')
     
-    
+    #pick some words to map including some known dialect words
+    #some DARE words and some words that are not evenly distributed
     topk_words = []    
     for words in region_words.values():
         topk_words.extend(words)
@@ -910,8 +939,14 @@ def map_words(coords, preds, vocab, map_dir, dataset_name):
             del m
 
 
-def visualise_bigaus(params=None, iter=None, output_type='pdf', **kwargs):
-
+def visualise_gaussians(params=None, iter=None, output_type='pdf', **kwargs):
+    """
+    Visualize the bivariate Gaussians learned from the model over a map.
+    params is the best parameters of NN model over development set.
+    
+    Note that the parameters are raw and the restrictions to put them in range
+    are not yet applied and should be applied here (e.g. softsign, softplus).
+    """
     mus, sigmas, corxys = params[0], params[1], params[2] 
     dataset_name = kwargs.get('dataset_name')
     lllat = 24.396308
@@ -1013,21 +1048,14 @@ def visualise_bigaus(params=None, iter=None, output_type='pdf', **kwargs):
         #now given corxy find sigmaxy
         sigmaxy = corxy * sigmax * sigmay
         
-        #corxy = 1.0 / (1 + np.abs(sigmaxy))
+        #note that corxy = 1.0 / (1 + np.abs(sigmaxy))
         Z = mlab.bivariate_normal(X, Y, sigmax=sigmax, sigmay=sigmay, mux=mux, muy=muy, sigmaxy=sigmaxy)
 
         #Z = maskoceans(X, Y, Z)
         
-
+        #note that you can adjust levels if there are no contours or they are big
         #con = m.contour(X, Y, Z, levels=[0.01], linewidths=0.5, colors='darkorange', antialiased=True)
         con = m.contour(X, Y, Z, 0, linewidths=0.5, colors='darkorange', antialiased=True)
-        '''
-        num_levels = len(con.collections)
-        if num_levels > 1:
-            for i in range(0, num_levels):
-                if i != (num_levels-1):
-                    con.collections[i].set_visible(False)
-        '''
         contour_labels = False
         if contour_labels:
             plt.clabel(con, [con.levels[-1]], inline=True, fontsize=10)
@@ -1049,6 +1077,9 @@ def visualise_bigaus(params=None, iter=None, output_type='pdf', **kwargs):
     plt.close()
 
 def tune(data, dataset_name, args, num_iter=100):
+    """
+    Tune the hyper-parameters of the model.
+    """
     logging.info('tuning over %s' %dataset_name)
     param_scores = []
     random.seed()
@@ -1105,7 +1136,12 @@ def parse_args(argv):
     args = parser.parse_args(argv)
     return args
 if __name__ == '__main__':
-    #THEANO_FLAGS='device=cpu' nice -n 10 python loc2lang_old.py -d ~/datasets/na/processed_data/ -enc utf-8 -reg 0 -drop 0.0 -mindf 200 -hid 1000 -ncomp 100 -autoencoder 100 -map
+    #THEANO_FLAGS='device=cpu'   nice -n 10 python loc2lang.py -d ~/datasets/na/processed_data/ -enc utf-8 -reg 0.0 -drop 0.0 -mindf 100 -hid 1000 -ncomp 500 -batch 5000
+    if not path.exists("./dumps"):
+        os.mkdir("./dumps")
+    if not path.exists("./maps"):
+        os.mkdir("./maps")
+        os.mkdir("./maps/video")
     args = parse_args(sys.argv[1:])
     datadir = args.dir
     dataset_name = datadir.split('/')[-3]
