@@ -1,13 +1,12 @@
-================
+
 ``GEOMDN`` readme
-================
+=================
 
 
 Introduction
 ------------
 
-``GEOMDN`` is an implementation of Mixture Density Networks (Bishop, 2005) customized to be 
-used for Twitter user geolocation (predict location given text) and lexical dialectology (predict text given location).
+``GEOMDN`` is an implementation of [Continuous Representation of Location for Geolocation and Lexical Dialectology using Mixture Density Networks (EMNLP2017)](https://drive.google.com/open?id=0B9ZfPKPvp-JickpYa0drZWQxcHc).
 
 The neural-network is implemented using Theano/Lasagne but it shouldn't be difficult to adopt it to other
 NN frameworks.
