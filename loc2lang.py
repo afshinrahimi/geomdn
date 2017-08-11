@@ -1144,7 +1144,7 @@ if __name__ == '__main__':
         os.mkdir("./maps/video")
     args = parse_args(sys.argv[1:])
     datadir = args.dir
-    dataset_name = datadir.split('/')[-3]
+    dataset_name = 'cmu' if 'cmu' in datadir else 'na'
     logging.info('dataset: %s' % dataset_name)
     data = load_data(data_home=args.dir, encoding=args.encoding, mindf=args.mindf, dataset_name=dataset_name)
     if args.tune:

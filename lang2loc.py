@@ -686,7 +686,7 @@ if __name__ == '__main__':
     #THEANO_FLAGS='device=cpu' nice -n 10 python lang2loc.py -d ~/datasets/na/processed_data/ -enc utf-8 -reg 1e-5 -drop 0.0 -mindf 10 -hid 300 -ncomp 100 
     args = parse_args(sys.argv[1:])
     datadir = args.dir
-    dataset_name = datadir.split('/')[-3]
+    dataset_name = 'cmu' if 'cmu' in datadir else 'na'
     logging.info('dataset: %s' % dataset_name)
     
     if args.toy:

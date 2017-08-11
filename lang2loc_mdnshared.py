@@ -46,25 +46,6 @@ def softsign(x):
 
 
 
-def geo_eval(y_true, y_pred, U_eval, classLatMedian, classLonMedian, userLocation):
-    assert len(y_pred) == len(U_eval), "#preds: %d, #users: %d" % (len(y_pred), len(U_eval))
-    distances = []
-    for i in range(0, len(y_pred)):
-        user = U_eval[i]
-        location = userLocation[user].split(',')
-        lat, lon = float(location[0]), float(location[1])
-        prediction = str(y_pred[i])
-        lat_pred, lon_pred = classLatMedian[prediction], classLonMedian[prediction]  
-        distance = haversine((lat, lon), (lat_pred, lon_pred))
-        distances.append(distance)
-
-    acc_at_161 = 100 * len([d for d in distances if d < 161]) / float(len(distances))
-    logging.info("Mean %f Median %f acc@161 %f" % (np.mean(distances), np.median(distances), acc_at_161))
-    return np.mean(distances), np.median(distances), acc_at_161
-
-
-
-
 
 def geo_latlon_eval(U_eval, userLocation, latlon_pred, contour_error_on_map=False, use_cluster_median=False, error_analysis=False):
     distances = []
@@ -825,7 +806,7 @@ if __name__ == '__main__':
     # THEANO_FLAGS='device=cpu' nice -n 10 python lang2loc_mdnshared.py -d ~/datasets/cmu/processed_data/ -enc latin1 -reg 0.0 -drop 0.0 -mindf 10 -hid 100 -ncomp 300 -batch 200 
     args = parse_args(sys.argv[1:])
     datadir = args.dir
-    dataset_name = datadir.split('/')[-3]
+    dataset_name = 'cmu' if 'cmu' in datadir else 'na'
     logging.info('dataset: %s' % dataset_name)
     
     if args.toy:
