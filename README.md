@@ -36,7 +36,7 @@ Geolocation Datasets
 --------------------
 Datasets are GEOTEXT a.k.a CMU (a small Twitter geolocation dataset)
 and TwitterUS a.k.a NA (a bigger Twitter geolocation dataset) both
-covering continental U.S. which can be download from [here](https://www.amazon.com/clouddrive/share/kfl0TTPDkXuFqTZ17WJSnhXT0q6fGkTlOTOLZ9VVPNu}
+covering continental U.S. which can be download from [here](https://www.amazon.com/clouddrive/share/kfl0TTPDkXuFqTZ17WJSnhXT0q6fGkTlOTOLZ9VVPNu)
 
 Quick Start
 -----------
