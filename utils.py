@@ -3,30 +3,37 @@ Created on 5 Mar 2017
 
 @author: af
 '''
+
 import matplotlib as mpl
 mpl.use('Agg')
-import matplotlib.mlab as mlab
-from matplotlib import ticker
-import matplotlib.pyplot as plt
-from matplotlib.mlab import griddata
-from matplotlib.patches import Polygon as MplPolygon
-import seaborn as sns
-sns.set(style="white")
-from scipy.spatial import ConvexHull
-from scipy import stats
-from mpl_toolkits.basemap import Basemap, cm, maskoceans
-from scipy.interpolate import griddata as gd
-import numpy as np
-#from matplotlib.patches import Polygon
-import pdb
+from collections import Counter
+from collections import defaultdict
 import json
 import logging
+import pdb
 import pickle
-from collections import Counter
+
+from matplotlib import ticker
+from matplotlib.mlab import griddata
+from matplotlib.patches import Polygon as MplPolygon
+from mpl_toolkits.basemap import Basemap, cm, maskoceans
+from scipy import stats
+from scipy.interpolate import griddata as gd
+from scipy.spatial import ConvexHull
 import shapefile
-from shapely.geometry import MultiPoint, Point, Polygon, asShape, shape
-from collections import defaultdict
 import shapely
+from shapely.geometry import MultiPoint, Point, Polygon, asShape, shape
+
+
+import matplotlib.mlab as mlab
+import matplotlib.pyplot as plt
+import numpy as np
+import seaborn as sns
+
+
+
+sns.set(style="white")
+#from matplotlib.patches import Polygon
 logging.basicConfig(format='%(asctime)s %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p', level=logging.INFO)
 
 
@@ -202,10 +209,6 @@ def get_state_from_coordinates(coordnates):
 
 
 def contour(coordinates, scores, world=False, filename="contour", do_contour = False, **kwargs):
-    #with open('./data/coordinate_socres.pkl', 'wb') as fout:
-    #    pickle.dump((coordinates, scores), fout)
-    with open('./data/coor_score_239.pkl', 'rb') as fin:
-        coordinates, scores = pickle.load(fin)
     from matplotlib import rc
     rc('font',**{'family':'sans-serif','sans-serif':['Helvetica']})
     ## for Palatino and other serif fonts use:
@@ -223,7 +226,6 @@ def contour(coordinates, scores, world=False, filename="contour", do_contour = F
         urlon = 180
         
     fig = plt.figure(figsize=(2.5, 2))
-    grid_transform = kwargs.get('grid', False)
     ax = fig.add_subplot(111, axisbg='w', frame_on=False)
     grid_interpolation_method = 'nearest'
  
