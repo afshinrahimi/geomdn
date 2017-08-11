@@ -27,6 +27,11 @@ a unigram probability distribution over vocabulary. The input is a normal 2d inp
 hidden layer consisits of several Gaussian distributions whose mus, sigmas and corxys are learned
 and its output is the probability of input in each of the Gaussian components.
 
+Look at some of the [maps](https://drive.google.com/open?id=0B9ZfPKPvp-JiWlhoZ01HMk9GY3c)
+
+[local words](https://drive.google.com/open?id=0B9ZfPKPvp-JiTW1yWlF2ZG56SUE) including named entities for several DARE dialect regions 
+
+and [local words] (https://drive.google.com/open?id=0B9ZfPKPvp-JiNHd6Um5nV2RBWjQ) including named entities for about 100 U.S. cities
 
 
 
@@ -41,7 +46,7 @@ Quick Start
 -----------
 
 1. Download the datasets and place them in ''./datasets/cmu'' and ''./datasets/na''
-for GEOTEXT and TwitterUS.
+for GEOTEXT and TwitterUS (contact me for the datasets).
 
 2. For lang2loc geolocation run:
 
