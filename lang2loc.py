@@ -114,6 +114,9 @@ class NNModel_lang2loc():
         """
         output = output.reshape(shape=(-1, 6, n_comp))
         mus = output[:, 0:2, :]
+        #note that this adjustment is problem specific, resutls in mus with
+        #first dimension (0, 90) and second dimension (-180, 0) which is suitable
+        #for geolocation within U.S. but for other problems this should change/readjusted.
         mus = np.array([90, -180])[np.newaxis, :, np.newaxis] * T.nnet.sigmoid(mus)
         sigmas = output[:, 2:4, :]
         corxy = output[:, 4, :]
