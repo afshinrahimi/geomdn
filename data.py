@@ -15,7 +15,6 @@ import logging
 from sklearn.feature_extraction.text import TfidfVectorizer
 from collections import defaultdict as dd, OrderedDict
 from haversine import haversine
-import kdtree
 import sys
 from sklearn.neighbors import NearestNeighbors
 from matplotlib.collections import PatchCollection
