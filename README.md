@@ -11,7 +11,7 @@ Introduction
 The neural-network is implemented using Theano/Lasagne but it shouldn't be difficult to adopt it to other
 NN frameworks.
 
-The work has 3 main sections:
+The work has 3 main modules:
 
 1. lang2loc.py implements mixture density networks to predict location from text input
 
@@ -26,6 +26,8 @@ a unigram probability distribution over vocabulary. The input is a normal 2d inp
 hidden layer consisits of several Gaussian distributions whose mus, sigmas and corxys are learned
 and its output is the probability of input in each of the Gaussian components.
 
+
+[![word maps](./hella.jpg)](https://drive.google.com/open?id=0B9ZfPKPvp-JiWlhoZ01HMk9GY3c)
 **Look at** some of the [maps](https://drive.google.com/open?id=0B9ZfPKPvp-JiWlhoZ01HMk9GY3c), a lot of
 [local words](https://drive.google.com/open?id=0B9ZfPKPvp-JiTW1yWlF2ZG56SUE) including named entities for several DARE dialect regions 
 and [city terms](https://drive.google.com/open?id=0B9ZfPKPvp-JiNHd6Um5nV2RBWjQ) including named entities for about 100 U.S. cities
